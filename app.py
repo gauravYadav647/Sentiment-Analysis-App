@@ -3,7 +3,13 @@ import pickle
 import re
 import nltk
 from nltk.corpus import stopwords
-from transformers import pipeline
+
+# Try importing BERT (safe)
+try:
+    from transformers import pipeline
+    BERT_AVAILABLE = True
+except:
+    BERT_AVAILABLE = False
 
 # Download stopwords
 nltk.download('stopwords')
@@ -12,17 +18,19 @@ nltk.download('stopwords')
 model = pickle.load(open("model.pkl", "rb"))
 vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
 
-# Load BERT model
+# Load BERT (only if available)
 @st.cache_resource
 def load_bert():
-    return pipeline("sentiment-analysis")
+    if BERT_AVAILABLE:
+        return pipeline("sentiment-analysis")
+    return None
 
 bert_model = load_bert()
 
 # Stopwords
 stop_words = set(stopwords.words('english'))
 
-# Clean text
+# Clean text function
 def clean_text(text):
     text = str(text).lower()
     text = re.sub('[^a-zA-Z]', ' ', text)
@@ -30,23 +38,34 @@ def clean_text(text):
     words = [w for w in words if w not in stop_words]
     return " ".join(words)
 
-# UI
+# UI Config
 st.set_page_config(page_title="Sentiment Analyzer", layout="centered")
 
 st.title("🛒 Sentiment Analyzer (ML + BERT)")
-st.markdown("### ✨ Compare Machine Learning vs Deep Learning")
+st.markdown("### ✨ Analyze product reviews using Machine Learning")
+
+# Sidebar info
+st.sidebar.header("ℹ️ About")
+st.sidebar.write("Fast Model: TF-IDF + Logistic Regression")
+st.sidebar.write("Advanced Model: BERT (context-aware but slower)")
 
 # Model selection
-model_choice = st.selectbox("Choose Model", ["ML Model (Fast)", "BERT Model (Advanced)"])
+model_choice = st.selectbox(
+    "Choose Model",
+    ["ML Model (Fast)", "BERT Model (Advanced)"]
+)
 
+# Input
 user_input = st.text_area("✍️ Enter your review:")
 
-if st.button("Analyze Sentiment"):
+# Button
+if st.button("🔍 Analyze Sentiment"):
 
     if user_input.strip() == "":
         st.warning("⚠️ Please enter a review")
     else:
 
+        # ---------------- ML MODEL ----------------
         if model_choice == "ML Model (Fast)":
             cleaned = clean_text(user_input)
             vector = vectorizer.transform([cleaned])
@@ -64,17 +83,31 @@ if st.button("Analyze Sentiment"):
 
             st.write("Confidence:", round(confidence, 2))
 
+            st.markdown("### 🧹 Cleaned Text")
+            st.write(cleaned)
+
+        # ---------------- BERT MODEL ----------------
         else:
-            result = bert_model(user_input)[0]
+            if bert_model is not None:
+                try:
+                    result = bert_model(user_input)[0]
+                    label = result['label']
+                    score = result['score']
 
-            label = result['label']
-            score = result['score']
+                    st.subheader("🤖 BERT Result")
 
-            st.subheader("🤖 BERT Result")
+                    if label == "POSITIVE":
+                        st.success("😊 Positive (BERT)")
+                    else:
+                        st.error("😡 Negative (BERT)")
 
-            if label == "POSITIVE":
-                st.success("😊 Positive (BERT)")
+                    st.write("Confidence:", round(score, 2))
+
+                except Exception:
+                    st.warning("⚠️ BERT model failed, please try ML model")
+
             else:
-                st.error("😡 Negative (BERT)")
+                st.warning("⚠️ BERT not available. Please use ML model.")
 
-            st.write("Confidence:", round(score, 2))
+# Footer note
+st.caption("Note: ML model is faster. BERT is more accurate but slower.")
